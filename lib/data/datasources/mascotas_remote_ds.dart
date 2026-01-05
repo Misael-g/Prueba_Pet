@@ -7,18 +7,44 @@ class MascotasRemoteDatasource {
   MascotasRemoteDatasource(this.client);
 
   Future<List<MascotaModel>> getMascotas() async {
-    final res = await client
+    final response = await client
         .from('mascotas')
         .select()
-        .eq('activo', true);
+        .eq('activo', true)
+        .eq('estado', 'disponible')
+        .order('created_at', ascending: false);
 
-    return res.map<MascotaModel>((e) => MascotaModel.fromJson(e)).toList();
+    return (response as List)
+        .map((json) => MascotaModel.fromJson(json))
+        .toList();
+  }
+
+  Future<List<MascotaModel>> getMascotasByRefugio(String refugioId) async {
+    final response = await client
+        .from('mascotas')
+        .select()
+        .eq('refugio_id', refugioId)
+        .order('created_at', ascending: false);
+
+    return (response as List)
+        .map((json) => MascotaModel.fromJson(json))
+        .toList();
+  }
+
+  Future<MascotaModel?> getMascotaById(String id) async {
+    final response = await client
+        .from('mascotas')
+        .select()
+        .eq('id', id)
+        .maybeSingle();
+
+    if (response == null) return null;
+
+    return MascotaModel.fromJson(response);
   }
 
   Future<void> addMascota(MascotaModel mascota) async {
-    await client.from('mascotas').insert(mascota.toJson(
-      mascota.id,
-    ));
+    await client.from('mascotas').insert(mascota.toJson());
   }
 
   Future<void> updateMascota(String id, Map<String, dynamic> data) async {
@@ -26,25 +52,37 @@ class MascotasRemoteDatasource {
   }
 
   Future<void> deleteMascota(String id) async {
-    await client.from('mascotas').delete().eq('id', id);
+    // Soft delete - solo marcar como inactivo
+    await client.from('mascotas').update({'activo': false}).eq('id', id);
   }
 
-  // Consulta con filtros: especie y estado
-  Future<List> getMascotasFiltradas({
+  Future<List<MascotaModel>> searchMascotas({
     String? especie,
-    String? estado,
+    String? tamanio,
+    String? sexo,
   }) async {
-    var query = client.from('mascotas').select().eq('activo', true);
+    var query = client
+        .from('mascotas')
+        .select()
+        .eq('activo', true)
+        .eq('estado', 'disponible');
 
-    if (especie != null) {
+    if (especie != null && especie.isNotEmpty) {
       query = query.eq('especie', especie);
     }
 
-    if (estado != null) {
-      query = query.eq('estado', estado);
+    if (tamanio != null && tamanio.isNotEmpty) {
+      query = query.eq('tamanio', tamanio);
     }
 
-    return await query;
+    if (sexo != null && sexo.isNotEmpty) {
+      query = query.eq('sexo', sexo);
+    }
+
+    final response = await query.order('created_at', ascending: false);
+
+    return (response as List)
+        .map((json) => MascotaModel.fromJson(json))
+        .toList();
   }
 }
-

@@ -1,3 +1,12 @@
+import 'package:flutter/material.dart';
+import '../../core/config/supabase_config.dart';
+import '../../core/utils/validators.dart';
+import '../../core/utils/snackbar_helper.dart';
+import 'register_page.dart';
+import 'forgot_password_page.dart';
+import '../adoptante/home_page.dart';
+import '../refugio/dashboard_refugio_page.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -6,73 +15,221 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final emailCtrl = TextEditingController();
-  final passCtrl = TextEditingController();
-  bool loading = false;
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
 
-  Future<void> login() async {
-    setState(() => loading = true);
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
 
     try {
-      final client = Supabase.instance.client;
+      final client = SupabaseConfig.client;
 
       await client.auth.signInWithPassword(
-        email: emailCtrl.text.trim(),
-        password: passCtrl.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
       );
-
-      // Obtener rol
-      final perfil = await client
-          .from('perfiles')
-          .select('rol')
-          .eq('id', client.auth.currentUser!.id)
-          .single();
-
-      final rol = perfil['rol'];
 
       if (!mounted) return;
 
-      // Redirección según rol
+      // Obtener perfil del usuario
+      final perfil = await client
+          .from('perfiles')
+          .select()
+          .eq('id', client.auth.currentUser!.id)
+          .single();
+
+      final rol = perfil['rol'] as String;
+
+      if (!mounted) return;
+
+      // Navegar según el rol
       if (rol == 'refugio') {
-        Navigator.pushReplacementNamed(context, '/dashboard-refugio');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const DashboardRefugioPage(),
+          ),
+        );
       } else {
-        Navigator.pushReplacementNamed(context, '/home-adoptante');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const HomePage(),
+          ),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al iniciar sesión')),
-      );
+      if (mounted) {
+        SnackbarHelper.showError(
+          context,
+          'Error al iniciar sesión: ${e.toString()}',
+        );
+      }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Iniciar sesión')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: emailCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Correo electrónico'),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 60),
+                // Logo
+                Icon(
+                  Icons.pets,
+                  size: 80,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'PetAdopt',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Encuentra tu compañero perfecto',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                ),
+                const SizedBox(height: 48),
+                // Email field
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: Validators.validateEmail,
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
+                // Password field
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: Validators.validatePassword,
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 8),
+                // Forgot password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ForgotPasswordPage(),
+                              ),
+                            );
+                          },
+                    child: const Text('¿Olvidaste tu contraseña?'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Login button
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Iniciar Sesión',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 24),
+                // Register link
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('¿No tienes cuenta? '),
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => const RegisterPage(),
+                                ),
+                              );
+                            },
+                      child: const Text(
+                        'Regístrate',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextField(
-              controller: passCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Contraseña'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: loading ? null : login,
-              child: loading
-                  ? const CircularProgressIndicator()
-                  : const Text('Entrar'),
-            ),
-          ],
+          ),
         ),
       ),
     );

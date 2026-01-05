@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import '../../core/config/supabase_config.dart';
 import '../auth/login_page.dart';
 
-class DashboardRefugioPage extends StatelessWidget {
-  const DashboardRefugioPage({super.key});
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard Refugio'),
+        title: const Text('Mascotas en Adopción'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -28,27 +28,19 @@ class DashboardRefugioPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.business, size: 80, color: Colors.teal),
+            Icon(Icons.pets, size: 80, color: Colors.teal),
             SizedBox(height: 16),
             Text(
-              'Próximamente: Gestión de mascotas',
+              'Próximamente: Catálogo de mascotas',
               style: TextStyle(fontSize: 18),
             ),
             SizedBox(height: 8),
             Text(
-              'Aquí podrás agregar, editar y gestionar tus mascotas',
+              'Aquí verás todas las mascotas disponibles',
               style: TextStyle(color: Colors.grey),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Función próximamente')),
-          );
-        },
-        child: const Icon(Icons.add),
       ),
     );
   }
