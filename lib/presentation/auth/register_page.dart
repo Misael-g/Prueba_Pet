@@ -35,164 +35,209 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _handleRegister() async {
-  if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
 
-  if (_passwordController.text != _confirmPasswordController.text) {
-    SnackbarHelper.showError(context, 'Las contraseñas no coinciden');
-    return;
-  }
-
-  setState(() => _isLoading = true);
-
-  try {
-    final client = SupabaseConfig.client;
-
-    debugPrint('📝 Iniciando registro...');
-
-    // 1. Registrar usuario en Supabase Auth
-    final authResponse = await client.auth.signUp(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-      data: {
-        'rol': _selectedRol,
-        'nombre_completo': _nombreController.text.trim(),
-      },
-    );
-
-    if (authResponse.user == null) {
-      throw Exception('Error al crear usuario');
+    if (_passwordController.text != _confirmPasswordController.text) {
+      SnackbarHelper.showError(context, 'Las contraseñas no coinciden');
+      return;
     }
 
-    final userId = authResponse.user!.id;
-    debugPrint('✅ Usuario creado: $userId');
+    setState(() => _isLoading = true);
 
-    // 2. ESPERAR a que el trigger cree el perfil
-    // En lugar de crear manualmente, solo esperamos
-    await Future.delayed(const Duration(seconds: 2));
-    debugPrint('⏳ Esperando a que el trigger cree el perfil...');
+    try {
+      final client = SupabaseConfig.client;
 
-    // 3. Verificar que el perfil fue creado por el trigger
-    for (int i = 0; i < 5; i++) {
+      debugPrint('📝 Iniciando registro...');
+
+      // 1. Registrar usuario en Supabase Auth
+      final authResponse = await client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        data: {
+          'rol': _selectedRol,
+          'nombre_completo': _nombreController.text.trim(),
+        },
+      );
+
+      if (authResponse.user == null) {
+        throw Exception('Error al crear usuario');
+      }
+
+      final userId = authResponse.user!.id;
+      debugPrint('✅ Usuario creado: $userId');
+
+      // 2. CREAR O ACTUALIZAR PERFIL MANUALMENTE (más confiable)
+      debugPrint('📝 Creando/actualizando perfil...');
+      
+      // Esperar un poco para que el trigger intente crear el perfil
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
       try {
-        final perfil = await client
+        // Intentar actualizar primero (por si el trigger lo creó)
+        final updateResult = await client
             .from('perfiles')
-            .select('id')
+            .update({
+              'nombre_completo': _nombreController.text.trim(),
+              'rol': _selectedRol,
+            })
             .eq('id', userId)
+            .select()
             .maybeSingle();
         
-        if (perfil != null) {
-          debugPrint('✅ Perfil creado por el trigger');
-          break;
+        if (updateResult != null) {
+          debugPrint('✅ Perfil actualizado: ${updateResult['rol']}');
+        } else {
+          // Si no existe, insertarlo
+          debugPrint('⚠️ Perfil no existe, creándolo...');
+          await client.from('perfiles').insert({
+            'id': userId,
+            'email': _emailController.text.trim(),
+            'nombre_completo': _nombreController.text.trim(),
+            'rol': _selectedRol,
+          });
+          debugPrint('✅ Perfil creado');
         }
       } catch (e) {
-        debugPrint('⏳ Esperando trigger... intento ${i + 1}/5');
+        // Si falla el update, intentar insert
+        debugPrint('⚠️ Error en update, intentando insert...');
+        try {
+          await client.from('perfiles').insert({
+            'id': userId,
+            'email': _emailController.text.trim(),
+            'nombre_completo': _nombreController.text.trim(),
+            'rol': _selectedRol,
+          });
+          debugPrint('✅ Perfil creado');
+        } catch (insertError) {
+          debugPrint('❌ Error creando perfil: $insertError');
+          throw Exception('No se pudo crear el perfil de usuario');
+        }
       }
       
+      // 3. Verificar que el perfil existe con el rol correcto
       await Future.delayed(const Duration(milliseconds: 500));
-    }
+      
+      final perfilVerificado = await client
+          .from('perfiles')
+          .select('id, rol')
+          .eq('id', userId)
+          .single();
+      
+      debugPrint('✅ Perfil verificado: ${perfilVerificado['rol']}');
 
-    // 4. Si es refugio, crear registro de refugio
-    if (_selectedRol == 'refugio') {
-      debugPrint('🏠 Creando refugio...');
-      
-      // IMPORTANTE: NO cerrar sesión todavía
-      // Esperar un poco más para asegurar que la sesión está activa
-      await Future.delayed(const Duration(seconds: 1));
-      
-      try {
-        // Verificar que la sesión siga activa
-        final session = client.auth.currentSession;
-        debugPrint('🔑 Sesión activa: ${session != null}');
-        debugPrint('🔑 User ID actual: ${client.auth.currentUser?.id}');
+      // 4. Si es refugio, crear registro de refugio
+      if (_selectedRol == 'refugio') {
+        debugPrint('🏠 Creando refugio...');
         
-        await client.from('refugios').insert({
-          'perfil_id': userId,
-          'nombre_refugio': _nombreRefugioController.text.trim(),
-        });
-        debugPrint('✅ Refugio creado');
-      } catch (e) {
-        debugPrint('❌ Error creando refugio: $e');
-        debugPrint('❌ Detalles: ${e.toString()}');
-        throw Exception('No se pudo crear el refugio');
+        // Esperar para asegurar que todo está listo
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        try {
+          await client.from('refugios').insert({
+            'perfil_id': userId,
+            'nombre_refugio': _nombreRefugioController.text.trim(),
+          });
+          
+          debugPrint('✅ Refugio creado');
+          
+        } catch (e) {
+          debugPrint('❌ Error creando refugio: $e');
+          debugPrint('❌ Tipo de error: ${e.runtimeType}');
+          
+          // Información de debug adicional
+          try {
+            final perfilDebug = await client
+                .from('perfiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+            debugPrint('📋 Estado del perfil: $perfilDebug');
+          } catch (debugError) {
+            debugPrint('❌ No se pudo obtener el perfil: $debugError');
+          }
+          
+          throw Exception('No se pudo crear el refugio. Por favor, intenta de nuevo.');
+        }
       }
-    }
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    // 5. Cerrar sesión para forzar verificación de email
-    await client.auth.signOut();
-    debugPrint('✅ Registro completado exitosamente');
+      // 5. Cerrar sesión para forzar verificación de email
+      await client.auth.signOut();
+      debugPrint('✅ Registro completado exitosamente');
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    // 6. Mostrar mensaje de éxito
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 32),
-            SizedBox(width: 12),
-            Expanded(child: Text('¡Registro exitoso!')),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Te hemos enviado un correo de verificación.',
-              style: TextStyle(fontSize: 15),
-            ),
-            SizedBox(height: 12),
-            Text(
-              '📧 Por favor revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            SizedBox(height: 12),
-            Text(
-              '💡 Tip: Si no lo ves, revisa tu carpeta de spam.',
-              style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                (route) => false,
-              );
-            },
-            child: const Text('Entendido'),
+      // 6. Mostrar mensaje de éxito
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              SizedBox(width: 12),
+              Expanded(child: Text('¡Registro exitoso!')),
+            ],
           ),
-        ],
-      ),
-    );
-  } catch (e) {
-    debugPrint('❌ Error en registro: $e');
-    
-    if (mounted) {
-      String errorMsg = 'Error al registrarse';
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Te hemos enviado un correo de verificación.',
+                style: TextStyle(fontSize: 15),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '📧 Por favor revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '💡 Tip: Si no lo ves, revisa tu carpeta de spam.',
+                style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                  (route) => false,
+                );
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ Error en registro: $e');
       
-      if (e.toString().contains('already registered')) {
-        errorMsg = 'Este email ya está registrado';
-      } else if (e.toString().contains('Invalid email')) {
-        errorMsg = 'Email inválido';
-      } else if (e.toString().contains('Password')) {
-        errorMsg = 'La contraseña debe tener al menos 6 caracteres';
+      if (mounted) {
+        String errorMsg = 'Error al registrarse';
+        
+        if (e.toString().contains('already registered')) {
+          errorMsg = 'Este email ya está registrado';
+        } else if (e.toString().contains('Invalid email')) {
+          errorMsg = 'Email inválido';
+        } else if (e.toString().contains('Password')) {
+          errorMsg = 'La contraseña debe tener al menos 6 caracteres';
+        } else if (e.toString().contains('refugio')) {
+          errorMsg = 'Error al crear el refugio. Intenta de nuevo o contacta soporte.';
+        }
+        
+        SnackbarHelper.showError(context, errorMsg);
       }
-      
-      SnackbarHelper.showError(context, errorMsg);
-    }
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
