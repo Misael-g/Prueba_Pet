@@ -24,3 +24,4 @@ class SupabaseConfig {
     debugPrint('═══════════════════════════════════════════');
   }
 }
+
