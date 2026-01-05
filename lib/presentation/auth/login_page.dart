@@ -36,19 +36,47 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final client = SupabaseConfig.client;
 
-      await client.auth.signInWithPassword(
+      final response = await client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
+      // Verificar si el email está confirmado
+      if (response.user?.emailConfirmedAt == null) {
+        await client.auth.signOut();
+        if (!mounted) return;
+        SnackbarHelper.showError(
+          context,
+          'Por favor verifica tu email antes de iniciar sesión',
+        );
+        return;
+      }
+
       if (!mounted) return;
 
-      // Obtener perfil del usuario
-      final perfil = await client
-          .from('perfiles')
-          .select()
-          .eq('id', client.auth.currentUser!.id)
-          .single();
+      // Obtener perfil del usuario con retry
+      Map<String, dynamic>? perfil;
+      int retries = 3;
+      
+      while (retries > 0 && perfil == null) {
+        try {
+          perfil = await client
+              .from('perfiles')
+              .select()
+              .eq('id', client.auth.currentUser!.id)
+              .single();
+          break;
+        } catch (e) {
+          retries--;
+          if (retries > 0) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        }
+      }
+
+      if (perfil == null) {
+        throw Exception('No se pudo obtener el perfil del usuario');
+      }
 
       final rol = perfil['rol'] as String;
 
@@ -70,10 +98,15 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (mounted) {
-        SnackbarHelper.showError(
-          context,
-          'Error al iniciar sesión: ${e.toString()}',
-        );
+        String errorMessage = 'Error al iniciar sesión';
+        
+        if (e.toString().contains('Invalid login credentials')) {
+          errorMessage = 'Email o contraseña incorrectos';
+        } else if (e.toString().contains('Email not confirmed')) {
+          errorMessage = 'Por favor verifica tu email antes de iniciar sesión';
+        }
+        
+        SnackbarHelper.showError(context, errorMessage);
       }
     } finally {
       if (mounted) {

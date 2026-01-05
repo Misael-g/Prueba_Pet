@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/utils/validators.dart';
 import '../../core/utils/snackbar_helper.dart';
-import '../../data/datasources/refugio_remote_ds.dart';
-import '../../data/models/refugio_model.dart';
 import 'login_page.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -49,6 +47,9 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final client = SupabaseConfig.client;
 
+      debugPrint('📝 Iniciando registro...');
+
+      // 1. Registrar usuario en Supabase Auth
       final authResponse = await client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -62,33 +63,140 @@ class _RegisterPageState extends State<RegisterPage> {
         throw Exception('Error al crear usuario');
       }
 
+      final userId = authResponse.user!.id;
+      debugPrint('✅ Usuario creado: $userId');
+
+      // 2. Esperar a que el trigger cree el perfil
+      await Future.delayed(const Duration(seconds: 1));
+
+      // 3. Verificar si el perfil existe, si no, crearlo manualmente
+      bool perfilExiste = false;
+      
+      for (int i = 0; i < 5; i++) {
+        try {
+          final perfil = await client
+              .from('perfiles')
+              .select('id')
+              .eq('id', userId)
+              .maybeSingle();
+          
+          if (perfil != null) {
+            perfilExiste = true;
+            debugPrint('✅ Perfil encontrado');
+            break;
+          }
+        } catch (e) {
+          debugPrint('⏳ Esperando trigger... intento ${i + 1}/5');
+        }
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Si el trigger no funcionó, crear perfil manualmente
+      if (!perfilExiste) {
+        debugPrint('⚠️ Trigger no funcionó, creando perfil manualmente...');
+        
+        try {
+          await client.from('perfiles').insert({
+            'id': userId,
+            'email': _emailController.text.trim(),
+            'nombre_completo': _nombreController.text.trim(),
+            'rol': _selectedRol,
+          });
+          debugPrint('✅ Perfil creado manualmente');
+        } catch (e) {
+          debugPrint('❌ Error creando perfil: $e');
+          throw Exception('No se pudo crear el perfil de usuario');
+        }
+      }
+
+      // 4. Si es refugio, crear registro de refugio
       if (_selectedRol == 'refugio') {
-        final refugioDs = RefugioRemoteDatasource(client);
-        final refugio = RefugioModel(
-          id: '',
-          perfilId: authResponse.user!.id,
-          nombreRefugio: _nombreRefugioController.text.trim(),
-        );
-        await refugioDs.createRefugio(refugio);
+        debugPrint('🏠 Creando refugio...');
+        
+        await Future.delayed(const Duration(milliseconds: 300));
+        
+        try {
+          await client.from('refugios').insert({
+            'perfil_id': userId,
+            'nombre_refugio': _nombreRefugioController.text.trim(),
+          });
+          debugPrint('✅ Refugio creado');
+        } catch (e) {
+          debugPrint('❌ Error creando refugio: $e');
+          throw Exception('No se pudo crear el refugio');
+        }
       }
 
       if (!mounted) return;
 
-      SnackbarHelper.showSuccess(
-        context,
-        'Registro exitoso! Verifica tu email.',
-      );
+      // 5. Cerrar sesión para forzar verificación de email
+      await client.auth.signOut();
+      debugPrint('✅ Registro completado exitosamente');
 
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (route) => false,
+      if (!mounted) return;
+
+      // 6. Mostrar mensaje de éxito
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              SizedBox(width: 12),
+              Expanded(child: Text('¡Registro exitoso!')),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Te hemos enviado un correo de verificación.',
+                style: TextStyle(fontSize: 15),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '📧 Por favor revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '💡 Tip: Si no lo ves, revisa tu carpeta de spam.',
+                style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                  (route) => false,
+                );
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
       );
     } catch (e) {
+      debugPrint('❌ Error en registro: $e');
+      
       if (mounted) {
-        SnackbarHelper.showError(
-          context,
-          'Error al registrarse: ${e.toString()}',
-        );
+        String errorMsg = 'Error al registrarse';
+        
+        if (e.toString().contains('already registered')) {
+          errorMsg = 'Este email ya está registrado';
+        } else if (e.toString().contains('Invalid email')) {
+          errorMsg = 'Email inválido';
+        } else if (e.toString().contains('Password')) {
+          errorMsg = 'La contraseña debe tener al menos 6 caracteres';
+        }
+        
+        SnackbarHelper.showError(context, errorMsg);
       }
     } finally {
       if (mounted) {
