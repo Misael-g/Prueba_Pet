@@ -49,7 +49,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       debugPrint('📝 Iniciando registro...');
 
-      // 1. Registrar usuario en Supabase Auth
+      // 1. Registrar usuario en Supabase Auth con metadata
       final authResponse = await client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -66,70 +66,42 @@ class _RegisterPageState extends State<RegisterPage> {
       final userId = authResponse.user!.id;
       debugPrint('✅ Usuario creado: $userId');
 
-      // 2. CREAR O ACTUALIZAR PERFIL MANUALMENTE (más confiable)
-      debugPrint('📝 Creando/actualizando perfil...');
-      
-      // Esperar un poco para que el trigger intente crear el perfil
-      await Future.delayed(const Duration(milliseconds: 1000));
-      
-      try {
-        // Intentar actualizar primero (por si el trigger lo creó)
-        final updateResult = await client
-            .from('perfiles')
-            .update({
-              'nombre_completo': _nombreController.text.trim(),
-              'rol': _selectedRol,
-            })
-            .eq('id', userId)
-            .select()
-            .maybeSingle();
-        
-        if (updateResult != null) {
-          debugPrint('✅ Perfil actualizado: ${updateResult['rol']}');
-        } else {
-          // Si no existe, insertarlo
-          debugPrint('⚠️ Perfil no existe, creándolo...');
-          await client.from('perfiles').insert({
-            'id': userId,
-            'email': _emailController.text.trim(),
-            'nombre_completo': _nombreController.text.trim(),
-            'rol': _selectedRol,
-          });
-          debugPrint('✅ Perfil creado');
-        }
-      } catch (e) {
-        // Si falla el update, intentar insert
-        debugPrint('⚠️ Error en update, intentando insert...');
+      // 2. Esperar a que el trigger cree el perfil
+      debugPrint('⏳ Esperando a que el trigger cree el perfil...');
+      await Future.delayed(const Duration(seconds: 3));
+
+      // 3. Verificar que el perfil existe (con reintentos)
+      bool perfilCreado = false;
+      for (int intento = 1; intento <= 5; intento++) {
         try {
-          await client.from('perfiles').insert({
-            'id': userId,
-            'email': _emailController.text.trim(),
-            'nombre_completo': _nombreController.text.trim(),
-            'rol': _selectedRol,
-          });
-          debugPrint('✅ Perfil creado');
-        } catch (insertError) {
-          debugPrint('❌ Error creando perfil: $insertError');
-          throw Exception('No se pudo crear el perfil de usuario');
+          final perfil = await client
+              .from('perfiles')
+              .select('id, rol')
+              .eq('id', userId)
+              .single();
+          
+          if (perfil != null) {
+            debugPrint('✅ Perfil encontrado: rol=${perfil['rol']}');
+            perfilCreado = true;
+            break;
+          }
+        } catch (e) {
+          debugPrint('⏳ Intento $intento/5: Perfil no disponible aún...');
+          if (intento < 5) {
+            await Future.delayed(const Duration(seconds: 1));
+          }
         }
       }
-      
-      // 3. Verificar que el perfil existe con el rol correcto
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      final perfilVerificado = await client
-          .from('perfiles')
-          .select('id, rol')
-          .eq('id', userId)
-          .single();
-      
-      debugPrint('✅ Perfil verificado: ${perfilVerificado['rol']}');
 
-      // 4. Si es refugio, crear registro de refugio
+      if (!perfilCreado) {
+        throw Exception('El perfil no se creó. Contacta al administrador.');
+      }
+
+      // 4. Si es refugio, crear el registro de refugio
       if (_selectedRol == 'refugio') {
         debugPrint('🏠 Creando refugio...');
         
-        // Esperar para asegurar que todo está listo
+        // Pequeña espera adicional
         await Future.delayed(const Duration(milliseconds: 500));
         
         try {
@@ -138,25 +110,10 @@ class _RegisterPageState extends State<RegisterPage> {
             'nombre_refugio': _nombreRefugioController.text.trim(),
           });
           
-          debugPrint('✅ Refugio creado');
-          
+          debugPrint('✅ Refugio creado exitosamente');
         } catch (e) {
           debugPrint('❌ Error creando refugio: $e');
-          debugPrint('❌ Tipo de error: ${e.runtimeType}');
-          
-          // Información de debug adicional
-          try {
-            final perfilDebug = await client
-                .from('perfiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-            debugPrint('📋 Estado del perfil: $perfilDebug');
-          } catch (debugError) {
-            debugPrint('❌ No se pudo obtener el perfil: $debugError');
-          }
-          
-          throw Exception('No se pudo crear el refugio. Por favor, intenta de nuevo.');
+          throw Exception('No se pudo crear el refugio: ${e.toString()}');
         }
       }
 
@@ -180,24 +137,37 @@ class _RegisterPageState extends State<RegisterPage> {
               Expanded(child: Text('¡Registro exitoso!')),
             ],
           ),
-          content: const Column(
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Te hemos enviado un correo de verificación.',
                 style: TextStyle(fontSize: 15),
               ),
-              SizedBox(height: 12),
-              Text(
+              const SizedBox(height: 12),
+              const Text(
                 '📧 Por favor revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
-              SizedBox(height: 12),
-              Text(
+              const SizedBox(height: 12),
+              const Text(
                 '💡 Tip: Si no lo ves, revisa tu carpeta de spam.',
                 style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
               ),
+              if (_selectedRol == 'refugio') ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  '🏠 Tu refugio ha sido creado exitosamente.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
             ],
           ),
           actions: [
@@ -220,14 +190,22 @@ class _RegisterPageState extends State<RegisterPage> {
       if (mounted) {
         String errorMsg = 'Error al registrarse';
         
-        if (e.toString().contains('already registered')) {
+        final errorStr = e.toString().toLowerCase();
+        
+        if (errorStr.contains('already registered') || 
+            errorStr.contains('already exists') ||
+            errorStr.contains('duplicate')) {
           errorMsg = 'Este email ya está registrado';
-        } else if (e.toString().contains('Invalid email')) {
+        } else if (errorStr.contains('invalid email')) {
           errorMsg = 'Email inválido';
-        } else if (e.toString().contains('Password')) {
+        } else if (errorStr.contains('password')) {
           errorMsg = 'La contraseña debe tener al menos 6 caracteres';
-        } else if (e.toString().contains('refugio')) {
-          errorMsg = 'Error al crear el refugio. Intenta de nuevo o contacta soporte.';
+        } else if (errorStr.contains('refugio')) {
+          errorMsg = 'Error al crear el refugio: ${e.toString()}';
+        } else if (errorStr.contains('perfil')) {
+          errorMsg = 'Error al verificar el perfil: ${e.toString()}';
+        } else {
+          errorMsg = 'Error: ${e.toString()}';
         }
         
         SnackbarHelper.showError(context, errorMsg);
