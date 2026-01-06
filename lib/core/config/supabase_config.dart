@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 class SupabaseConfig {
   static SupabaseClient get client => Supabase.instance.client;
 
-  static Future<void> init() async {
-    await dotenv.load();
-    
+  static Future<void> initialize() async {
     await Supabase.initialize(
       url: dotenv.env['SUPABASE_URL']!,
       anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
@@ -23,5 +21,5 @@ class SupabaseConfig {
     debugPrint('URL: ${dotenv.env['SUPABASE_URL']}');
     debugPrint('═══════════════════════════════════════════');
   }
-}
+} 
 

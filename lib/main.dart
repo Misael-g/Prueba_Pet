@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/config/supabase_config.dart';
 import 'presentation/auth/login_page.dart';
 import 'presentation/adoptante/main_navigation.dart';
 import 'presentation/refugio/dashboard_refugio_page.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SupabaseConfig.init();
+
+  // Cargar variables de entorno
+  await dotenv.load(fileName: ".env");
+
+  // Inicializar Supabase (las variables ya están cargadas)
+  await SupabaseConfig.initialize();
+
   runApp(const MyApp());
 }
 
