@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuenta Confirmada - PetAdopt</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .success {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+            color: #15803d;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .icon {
+            font-size: 80px;
+            margin-bottom: 15px;
+            animation: checkmark 0.8s ease-in-out;
+        }
+
+        @keyframes checkmark {
+            0% {
+                transform: scale(0) rotate(-180deg);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2) rotate(0deg);
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        .success h2 {
+            color: #15803d;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        .success p {
+            margin-bottom: 10px;
+        }
+
+        .redirect-info {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .countdown {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            border-radius: 25px;
+            text-decoration: none;
+            margin-top: 20px;
+            transition: all 0.3s;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .features {
+            margin-top: 30px;
+            text-align: left;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+        }
+
+        .features h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .feature-item span {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🐾</div>
+        <h1>PetAdopt</h1>
+        
+        <div class="success">
+            <div class="icon">✅</div>
+            <h2>¡Cuenta Confirmada!</h2>
+            <p>Tu cuenta ha sido verificada exitosamente.</p>
+            <p>Ya puedes iniciar sesión en PetAdopt y comenzar a ayudar mascotas a encontrar un hogar.</p>
+            <div class="redirect-info">
+                Redirigiendo a la aplicación en <span class="countdown" id="countdown">5</span> segundos...
+            </div>
+            <a href="loginpro://verified" class="btn">Abrir PetAdopt Ahora</a>
+        </div>
+
+        <div class="features">
+            <h3>¿Qué puedes hacer ahora?</h3>
+            <div class="feature-item">
+                <span>🏠</span>
+                <span>Publicar mascotas en adopción</span>
+            </div>
+            <div class="feature-item">
+                <span>❤️</span>
+                <span>Adoptar mascotas que necesitan hogar</span>
+            </div>
+            <div class="feature-item">
+                <span>💬</span>
+                <span>Conectar con otros amantes de animales</span>
+            </div>
+            <div class="feature-item">
+                <span>📱</span>
+                <span>Recibir notificaciones de nuevas adopciones</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Countdown y redirección
+        let countdown = 5;
+        const countdownElement = document.getElementById('countdown');
+
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                // Intentar abrir la app
+                window.location.href = 'loginpro://verified';
+                
+                // Fallback después de 2 segundos (si la app no se abre)
+                setTimeout(() => {
+                    // Puedes redirigir a tu sitio web o dejar la página como está
+                    console.log('App no se abrió, usuario permanece en la página');
+                }, 2000);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
