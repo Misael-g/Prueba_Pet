@@ -47,16 +47,29 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final client = SupabaseConfig.client;
 
-      debugPrint('═══════════════════════════════════════════');
-      debugPrint('📝 INICIANDO PROCESO DE REGISTRO');
-      debugPrint('═══════════════════════════════════════════');
+      debugPrint('═══════════════════════════════════════════════════════════════');
+      debugPrint('🔐 INICIANDO PROCESO DE REGISTRO');
+      debugPrint('═══════════════════════════════════════════════════════════════');
       debugPrint('📧 Email: ${_emailController.text.trim()}');
       debugPrint('👤 Nombre: ${_nombreController.text.trim()}');
       debugPrint('🎭 Rol: $_selectedRol');
       if (_selectedRol == 'refugio') {
         debugPrint('🏠 Refugio: ${_nombreRefugioController.text.trim()}');
       }
-      debugPrint('───────────────────────────────────────────');
+      debugPrint('─────────────────────────────────────────────────────────────');
+
+      // 🔥 IMPORTANTE: Preparar metadatos según el rol
+      final Map<String, dynamic> metadata = {
+        'rol': _selectedRol,
+        'nombre_completo': _nombreController.text.trim(),
+      };
+
+      // 🏠 Si es refugio, agregar nombre del refugio
+      if (_selectedRol == 'refugio') {
+        metadata['nombre_refugio'] = _nombreRefugioController.text.trim();
+      }
+
+      debugPrint('📦 Metadatos a enviar: $metadata');
 
       // 1. Registrar usuario en Supabase Auth
       debugPrint('');
@@ -65,10 +78,7 @@ class _RegisterPageState extends State<RegisterPage> {
       final authResponse = await client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        data: {
-          'rol': _selectedRol,
-          'nombre_completo': _nombreController.text.trim(),
-        },
+        data: metadata, // 🔥 Enviar metadatos completos
       );
 
       debugPrint('✅ Respuesta de Auth recibida');
@@ -80,46 +90,50 @@ class _RegisterPageState extends State<RegisterPage> {
         throw Exception('Auth no retornó usuario');
       }
 
-      final userId = authResponse.user!.id;
-      
-      // 2. Si es refugio, crear el registro (el perfil ya se creó por trigger)
+      if (!mounted) return;
+
+      // 2. Esperar a que el trigger cree el perfil y refugio
+      debugPrint('');
+      debugPrint('PASO 2: Esperando a que el trigger cree el perfil...');
+      await Future.delayed(const Duration(seconds: 3));
+
+      // 3. Verificar si el refugio se creó (solo para debugging)
       if (_selectedRol == 'refugio') {
         debugPrint('');
-        debugPrint('PASO 2: Creando registro de refugio...');
-        
-        // Esperar un momento para que el trigger termine
-        await Future.delayed(const Duration(seconds: 2));
-        
+        debugPrint('PASO 3: Verificando creación de refugio...');
         try {
-          await client.from('refugios').insert({
-            'perfil_id': userId,
-            'nombre_refugio': _nombreRefugioController.text.trim(),
-          });
+          final refugioCheck = await client
+              .from('refugios')
+              .select()
+              .eq('perfil_id', authResponse.user!.id)
+              .maybeSingle();
           
-          debugPrint('✅ Refugio creado exitosamente');
+          if (refugioCheck != null) {
+            debugPrint('✅ Refugio creado exitosamente');
+            debugPrint('   - ID: ${refugioCheck['id']}');
+            debugPrint('   - Nombre: ${refugioCheck['nombre_refugio']}');
+          } else {
+            debugPrint('⚠️ Refugio no encontrado, pero continuamos...');
+          }
         } catch (e) {
-          debugPrint('❌ Error creando refugio: $e');
-          // No lanzar error, porque el perfil ya se creó
-          // El refugio se puede crear después
+          debugPrint('⚠️ Error verificando refugio: $e');
         }
       }
 
-      if (!mounted) return;
-
-      // 3. Cerrar sesión para forzar verificación email
+      // 4. Cerrar sesión para forzar verificación email
       debugPrint('');
-      debugPrint('PASO 3: Cerrando sesión para forzar verificación email...');
+      debugPrint('PASO 4: Cerrando sesión para forzar verificación email...');
       await client.auth.signOut();
       debugPrint('✅ Sesión cerrada');
 
       debugPrint('');
-      debugPrint('═══════════════════════════════════════════');
+      debugPrint('═══════════════════════════════════════════════════════════════');
       debugPrint('✅ REGISTRO COMPLETADO EXITOSAMENTE');
-      debugPrint('═══════════════════════════════════════════');
+      debugPrint('═══════════════════════════════════════════════════════════════');
 
       if (!mounted) return;
 
-      // 4. Mostrar diálogo de éxito
+      // 5. Mostrar diálogo de éxito
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -161,6 +175,11 @@ class _RegisterPageState extends State<RegisterPage> {
                     color: Colors.green,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'Nombre: ${_nombreRefugioController.text.trim()}',
+                  style: const TextStyle(fontSize: 13),
+                ),
               ],
             ],
           ),
@@ -185,7 +204,7 @@ class _RegisterPageState extends State<RegisterPage> {
       debugPrint('Tipo: ${e.runtimeType}');
       debugPrint('Stack trace:');
       debugPrint('$stackTrace');
-      debugPrint('═══════════════════════════════════════════');
+      debugPrint('═══════════════════════════════════════════════════════════════');
       
       if (mounted) {
         String errorMsg = 'Error al registrarse';
@@ -200,8 +219,6 @@ class _RegisterPageState extends State<RegisterPage> {
           errorMsg = 'Email inválido';
         } else if (errorStr.contains('password')) {
           errorMsg = 'La contraseña debe tener al menos 6 caracteres';
-        } else if (errorStr.contains('refugio')) {
-          errorMsg = 'Error al crear el refugio: ${e.toString()}';
         } else {
           errorMsg = 'Error: ${e.toString()}';
         }

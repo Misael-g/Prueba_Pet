@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/config/supabase_config.dart';
 import 'presentation/auth/login_page.dart';
-import 'presentation/adoptante/home_page.dart';
+import 'presentation/adoptante/main_navigation.dart';
 import 'presentation/refugio/dashboard_refugio_page.dart';
 
 void main() async {
@@ -85,7 +85,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
           if (rol == 'refugio') {
             return const DashboardRefugioPage();
           } else {
-            return const HomePage();
+            // 🎯 Navegación con pestañas para adoptante
+            return const MainNavigation();
           }
         }
 
