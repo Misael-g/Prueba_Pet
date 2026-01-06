@@ -16,7 +16,7 @@ class GeminiService {
 
   // URL base de la API de Gemini (modelo flash para respuestas rápidas)
   static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   // Contexto especializado para PetAdopt
   static const String _systemPrompt = '''
